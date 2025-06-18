@@ -21,7 +21,7 @@ creds = ServiceAccountCredentials.from_json_keyfile_dict(google_creds_dict, scop
 client = gspread.authorize(creds)
 
 # Open your certificate sheet
-SHEET_NAME = "DreamsHelix_Certificates"  # <-- Replace with your Google Sheet name
+SHEET_NAME = "student_details"  # <-- Replace with your Google Sheet name
 sheet = client.open(SHEET_NAME).sheet1   # or .worksheet("Sheet1") if named
 
 @app.get("/", response_class=HTMLResponse)
