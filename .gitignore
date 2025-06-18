@@ -1,0 +1,7 @@
+# Ignore credentials file
+credentials.json
+
+# Ignore Python junk files
+_pycache_/
+*.pyc
+.env

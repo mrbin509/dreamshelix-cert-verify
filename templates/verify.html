@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DreamsHelix Certificate Verification</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+</head>
+<body>
+  <div class="container">
+    <img src="/static/dreamshelix-logo.png" alt="DreamsHelix Logo" class="logo">
+
+    <h1>🔍 DreamsHelix Certificate Verification</h1>
+    <p class="sub-heading">Enter or Scan your Certificate ID to verify its authenticity.</p>
+
+    <form method="post" action="/verify" onsubmit="showLoader()">
+      <input type="text" name="cert_id" id="cert_id" placeholder="Enter Certificate ID" required>
+      <button type="submit">Verify</button>
+    </form>
+
+    <div id="loader" class="loader" style="display: none;"></div>
+
+    <div id="qr-reader" class="qr-box"></div>
+    <button onclick="startQRScanner()">📷 Scan QR Code</button>
+
+    {% if message %}
+      <div class="result-box {{ status }}">
+        {{ message | safe }}
+      </div>
+    {% endif %}
+
+    <footer>
+      <p>© 2025 <strong>DreamsHelix EdTech Pvt. Ltd.</strong> | All Rights Reserved.</p>
+    </footer>
+  </div>
+
+  <script>
+    function showLoader() {
+      document.getElementById('loader').style.display = 'block';
+    }
+
+    function startQRScanner() {
+      const qrBox = document.getElementById("qr-reader");
+      qrBox.innerHTML = "";
+      const html5QrCode = new Html5Qrcode("qr-reader");
+      const config = { fps: 10, qrbox: 200 };
+
+      html5QrCode.start(
+        { facingMode: "environment" },
+        config,
+        qrCodeMessage => {
+          document.getElementById("cert_id").value = qrCodeMessage;
+          html5QrCode.stop();
+          qrBox.innerHTML = "✅ QR Code detected!";
+        },
+        errorMessage => {
+          // Ignore scan errors silently
+        }
+      ).catch(err => {
+        qrBox.innerHTML = "❌ Camera access denied or unavailable.";
+      });
+    }
+  </script>
+</body>
+</html>
