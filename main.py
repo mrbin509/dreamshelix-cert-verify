@@ -1,62 +1,93 @@
-from fastapi import FastAPI, Request, Form
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+import csv
+import os
+import qrcode
+from PIL import Image, ImageDraw, ImageFont
+import datetime
+import json
 
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import os
-import json
+from pydrive.auth import GoogleAuth
+from pydrive.drive import GoogleDrive
 
-app = FastAPI()
+# -------------------- CONFIG --------------------
+SHEET_NAME = "student_details"
+CERT_TEMPLATE_PATH = "certificate.jpg"
+CERTIFICATES_DIR = "certificates"
+QRCODE_DIR = "qrcodes"
+FONT_PATH = "GreatVibes-Regular.ttf"  # Change to your font path
+FONT_SIZE = 50
+QR_SIZE = 150
 
-# Mount static and template directories
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+# Create cert dir if missing
+os.makedirs(CERTIFICATES_DIR, exist_ok=True)
+os.makedirs(QRCODE_DIR, exist_ok=True)
 
-# Load Google credentials from ENV (secure for Railway)
+# -------------------- GOOGLE SETUP --------------------
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-google_creds_dict = json.loads(os.getenv('GOOGLE_CREDENTIALS_JSON'))
-creds = ServiceAccountCredentials.from_json_keyfile_dict(google_creds_dict, scope)
+creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
+sheet = client.open(SHEET_NAME).sheet1
 
-# Open your certificate sheet
-SHEET_NAME = "student_details"  # <-- Replace with your Google Sheet name
-sheet = client.open(SHEET_NAME).sheet1   # or .worksheet("Sheet1") if named
+gauth = GoogleAuth()
+gauth.LocalWebserverAuth()
+drive = GoogleDrive(gauth)
 
-@app.get("/", response_class=HTMLResponse)
-async def verify_form(request: Request):
-    return templates.TemplateResponse("verify.html", {"request": request, "message": "", "status": ""})
+# -------------------- HELPER FUNCTION --------------------
+def generate_certificate(cert_id, name, course):
+    # Load and draw on certificate
+    cert = Image.open(CERT_TEMPLATE_PATH).convert("RGB")
+    draw = ImageDraw.Draw(cert)
+    font = ImageFont.truetype(FONT_PATH, FONT_SIZE)
 
-@app.post("/verify", response_class=HTMLResponse)
-async def verify_certificate(request: Request, cert_id: str = Form(...)):
-    data = sheet.get_all_records()
+    # Draw text
+    draw.text((450, 400), name, font=font, fill="black")
+    draw.text((450, 500), course, font=font, fill="black")
+    draw.text((450, 600), datetime.date.today().strftime("%B %d, %Y"), font=font, fill="black")
 
-    result = next((row for row in data if str(row.get("CertificateID")).strip() == cert_id.strip()), None)
+    # Generate QR code
+    qr = qrcode.make(cert_id)
+    qr = qr.resize((QR_SIZE, QR_SIZE))
+    cert.paste(qr, (1000, 600))  # Adjust (x,y) for QR position
 
-    if result:
-        name = result.get("Name")
-        course = result.get("Course")
-        issue_date = result.get("IssueDate")
-        status = result.get("Status")
-        pdf_link = result.get("PDFLink", "#")
+    # Save to PDF
+    pdf_path = f"{CERTIFICATES_DIR}/{cert_id}.pdf"
+    cert.save(pdf_path, "PDF")
+    return pdf_path
 
-        message = f"""
-        ✅ <strong>Certificate Verified</strong><br><br>
-        <strong>Name:</strong> {name}<br>
-        <strong>Course:</strong> {course}<br>
-        <strong>Issued On:</strong> {issue_date}<br>
-        <strong>Status:</strong> {status}<br><br>
-        <a href="{pdf_link}" target="_blank">🔗 Download Certificate PDF</a>
-        """
-        return templates.TemplateResponse("verify.html", {
-            "request": request,
-            "message": message,
-            "status": "success"
-        })
-    else:
-        return templates.TemplateResponse("verify.html", {
-            "request": request,
-            "message": "❌ No certificate found with this ID. Please check again.",
-            "status": "error"
-        })
+def upload_to_drive(pdf_path, cert_id):
+    file = drive.CreateFile({'title': f'{cert_id}.pdf'})
+    file.SetContentFile(pdf_path)
+    file.Upload()
+    file['sharingUser'] = {'role': 'reader', 'type': 'anyone'}
+    file.Upload()
+    return file['alternateLink']
+
+# -------------------- MAIN --------------------
+def main():
+    with open("students.csv", "r") as f:
+        reader = csv.DictReader(f)
+        for index, row in enumerate(reader, start=1):
+            name = row["Name"]
+            course = row["Course"]
+            cert_id = f"1PYTH{str(index).zfill(3)}"
+            print(f"Generating certificate for {name} - ID: {cert_id}")
+
+            # Generate cert
+            pdf_path = generate_certificate(cert_id, name, course)
+
+            # Upload to drive
+            pdf_link = upload_to_drive(pdf_path, cert_id)
+
+            # Append to Google Sheet
+            sheet.append_row([
+                cert_id,
+                name,
+                course,
+                datetime.date.today().isoformat(),
+                "Verified",
+                pdf_link
+            ])
+
+if __name__ == "__main__":
+    main()

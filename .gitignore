@@ -1,5 +1,7 @@
 # Ignore credentials file
 credentials.json
+certificates/
+qrcodes/
 
 # Ignore Python junk files
 _pycache_/
