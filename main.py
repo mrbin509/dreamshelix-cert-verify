@@ -25,7 +25,7 @@ os.makedirs(QRCODE_DIR, exist_ok=True)
 
 # -------------------- GOOGLE SETUP --------------------
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+creds = ServiceAccountCredentials.from_json_keyfile_name("GOOGLE_CREDENTIALS_JSON", scope)
 client = gspread.authorize(creds)
 sheet = client.open(SHEET_NAME).sheet1
 
